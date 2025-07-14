@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Interest Selector</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 40px;
+            width: 400px;
+            max-width: 90vw;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: shimmer 8s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes shimmer {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) rotate(180deg);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2.2em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1em;
+            font-weight: 300;
+        }
+
+        .user-info {
+            display: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .user-info.show {
+            display: block;
+        }
+
+        .user-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 0 auto 10px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .user-name {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .user-email {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9em;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.8em;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ffd93d);
+            border-radius: 3px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 33.33%;
+        }
+
+        .page {
+            display: none;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .interests-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .interest-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .interest-card::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+            transition: all 0.3s ease;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .interest-card:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .interest-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .interest-card.selected {
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: scale(1.05);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+
+        .interest-card.selected::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .book-cover {
+            width: 60px;
+            height: 80px;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            border-radius: 8px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .interest-card.selected .book-cover {
+            background: linear-gradient(135deg, #fff, #f0f0f0);
+            color: #333;
+        }
+
+        .interest-title {
+            color: white;
+            font-weight: 600;
+            font-size: 1em;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .interest-card.selected .interest-title {
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .nav-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .nav-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .nav-btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .nav-btn.skip {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-btn.next {
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .page-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .dot.active {
+            background: #ffd93d;
+            transform: scale(1.2);
+        }
+
+        .selections-count {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+
+        .floating-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            animation: float 8s infinite ease-in-out;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+        }
+
+        .login-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .login-modal.show {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .login-content h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .login-content p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .google-signin-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: #4285f4;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .google-signin-btn:hover {
+            background: #3367d6;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #ffd93d;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: white;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .success-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .success-message h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+
+        .success-message p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="floating-particles" id="particles"></div>
+
+    <div class="container">
+        <div class="header">
+            <h1>Choose Your Interests</h1>
+            <p>Get personalized book recommendations</p>
+        </div>
+
+        <div class="user-info" id="userInfo">
+            <img class="user-avatar" id="userAvatar" src="" alt="User Avatar">
+            <div class="user-name" id="userName"></div>
+            <div class="user-email" id="userEmail"></div>
+            <button class="logout-btn" onclick="signOut()">Sign Out</button>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="page-indicator">
+            <div class="dot active"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+
+        <div class="selections-count" id="selectionCount">0 of 3+ interests selected</div>
+
+        <!-- Page 1: Fiction & Literature -->
+        <div class="page active" id="page1">
+            <div class="interests-grid">
+                <div class="interest-card" data-interest="fantasy">
+                    <div class="book-cover">🧙</div>
+                    <div class="interest-title">Fantasy</div>
+                </div>
+                <div class="interest-card" data-interest="mystery">
+                    <div class="book-cover">🕵️</div>
+                    <div class="interest-title">Mystery</div>
+                </div>
+                <div class="interest-card" data-interest="romance">
+                    <div class="book-cover">💕</div>
+                    <div class="interest-title">Romance</div>
+                </div>
+                <div class="interest-card" data-interest="thriller">
+                    <div class="book-cover">⚡</div>
+                    <div class="interest-title">Thriller</div>
+                </div>
+                <div class="interest-card" data-interest="literary">
+                    <div class="book-cover">📚</div>
+                    <div class="interest-title">Literary Fiction</div>
+                </div>
+                <div class="interest-card" data-interest="historical">
+                    <div class="book-cover">⏳</div>
+                    <div class="interest-title">Historical</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 2: Non-Fiction -->
+        <div class="page" id="page2">
+            <div class="interests-grid">
+                <div class="interest-card" data-interest="science">
+                    <div class="book-cover">🔬</div>
+                    <div class="interest-title">Science</div>
+                </div>
+                <div class="interest-card" data-interest="biography">
+                    <div class="book-cover">👤</div>
+                    <div class="interest-title">Biography</div>
+                </div>
+                <div class="interest-card" data-interest="business">
+                    <div class="book-cover">💼</div>
+                    <div class="interest-title">Business</div>
+                </div>
+                <div class="interest-card" data-interest="selfhelp">
+                    <div class="book-cover">🌟</div>
+                    <div class="interest-title">Self-Help</div>
+                </div>
+                <div class="interest-card" data-interest="history">
+                    <div class="book-cover">🏛️</div>
+                    <div class="interest-title">History</div>
+                </div>
+                <div class="interest-card" data-interest="philosophy">
+                    <div class="book-cover">🤔</div>
+                    <div class="interest-title">Philosophy</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 3: Specialized -->
+        <div class="page" id="page3">
+            <div class="interests-grid">
+                <div class="interest-card" data-interest="cooking">
+                    <div class="book-cover">👨‍🍳</div>
+                    <div class="interest-title">Cooking</div>
+                </div>
+                <div class="interest-card" data-interest="travel">
+                    <div class="book-cover">✈️</div>
+                    <div class="interest-title">Travel</div>
+                </div>
+                <div class="interest-card" data-interest="art">
+                    <div class="book-cover">🎨</div>
+                    <div class="interest-title">Art & Design</div>
+                </div>
+                <div class="interest-card" data-interest="technology">
+                    <div class="book-cover">💻</div>
+                    <div class="interest-title">Technology</div>
+                </div>
+                <div class="interest-card" data-interest="health">
+                    <div class="book-cover">🏥</div>
+                    <div class="interest-title">Health & Fitness</div>
+                </div>
+                <div class="interest-card" data-interest="spirituality">
+                    <div class="book-cover">🙏</div>
+                    <div class="interest-title">Spirituality</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <p>Saving your preferences...</p>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            <div class="success-icon">🎉</div>
+            <h2>Success!</h2>
+            <p>Your preferences have been saved and your personalized recommendations are ready!</p>
+        </div>
+
+        <div class="navigation">
+            <button class="nav-btn skip" id="skipBtn">Skip</button>
+            <button class="nav-btn next" id="nextBtn">Next</button>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="login-modal" id="loginModal">
+        <div class="login-content">
+            <h2>🔐 Sign In Required</h2>
+            <p>Please sign in with your Google account to save your preferences and get personalized book
+                recommendations.</p>
+            <div id="g_id_onload" data-client_id="431905824213-kmv5vrg63fd0o5q75df65s0fo9qbj1vh.apps.googleusercontent.com" data-callback="handleCredentialResponse"
+                data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin" data-type="standard" data-size="large" data-theme="filled_blue"
+                data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left">
+            </div>
+            <button class="google-signin-btn" onclick="initiateGoogleSignIn()">
+                <svg width="20" height="20" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="currentColor"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="currentColor"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="currentColor"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Sign in with Google
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const totalPages = 3;
+        let selectedInterests = new Set();
+        let currentUser = null;
+
+        // Database configuration
+        const DB_CONFIG = {
+            host: 'localhost',
+            port: 5432,
+            database: 'book_db',
+            user: 'norman',
+            password: '097761' 
+        };
+
+        // Check if user is already logged in
+        function checkUserSession() {
+            const userData = localStorage.getItem('bookAppUser');
+            if (userData) {
+                currentUser = JSON.parse(userData);
+                showUserInfo(currentUser);
+                loadUserPreferences();
+            }
+        }
+
+        // Google Sign-In configuration
+        function initiateGoogleSignIn() {
+            // Initialize Google Sign-In
+            google.accounts.id.initialize({
+                client_id: '431905824213-kmv5vrg63fd0o5q75df65s0fo9qbj1vh.apps.googleusercontent.com', 
+                callback: handleCredentialResponse
+            });
+
+            google.accounts.id.prompt();
+        }
+
+        // Handle Google Sign-In response
+        function handleCredentialResponse(response) {
+            // Decode the JWT token
+            const payload = JSON.parse(atob(response.credential.split('.')[1]));
+
+            currentUser = {
+                id: payload.sub,
+                name: payload.name,
+                email: payload.email,
+                picture: payload.picture
+            };
+
+            // Store user data
+            localStorage.setItem('bookAppUser', JSON.stringify(currentUser));
+
+            // Show user info
+            showUserInfo(currentUser);
+
+            // Close login modal
+            document.getElementById('loginModal').classList.remove('show');
+
+            // Load existing preferences if any
+            loadUserPreferences();
+        }
+
+        // Show user information
+        function showUserInfo(user) {
+            document.getElementById('userInfo').classList.add('show');
+            document.getElementById('userAvatar').src = user.picture;
+            document.getElementById('userName').textContent = user.name;
+            document.getElementById('userEmail').textContent = user.email;
+        }
+
+        // Sign out function
+        function signOut() {
+            google.accounts.id.disableAutoSelect();
+            localStorage.removeItem('bookAppUser');
+            currentUser = null;
+            document.getElementById('userInfo').classList.remove('show');
+            selectedInterests.clear();
+            updateSelectionCount();
+            updateNextButton();
+
+            // Reset all selections
+            document.querySelectorAll('.interest-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+        }
+
+        // Save user preferences to database
+        async function saveUserPreferences() {
+            if (!currentUser) return;
+
+            const preferences = {
+                user_id: currentUser.id,
+                username: currentUser.name,
+                email: currentUser.email,
+                interests: Array.from(selectedInterests),
+                created_at: new Date().toISOString()
+            };
+
+            try {
+                // In a real application, you would send this to your backend API
+                // which would then save to PostgreSQL
+                const response = await fetch('/api/save-preferences', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(preferences)
+                });
+
+                if (response.ok) {
+                    console.log('Preferences saved successfully');
+                    return true;
+                } else {
+                    console.error('Failed to save preferences');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error saving preferences:', error);
+
+                // Simulate successful save for demo purposes
+                console.log('Simulating successful save:', preferences);
+
+                // Store in localStorage as fallback
+                localStorage.setItem(`userPreferences_${currentUser.id}`, JSON.stringify(preferences));
+                return true;
+            }
+        }
+
+        // Load user preferences from database
+        async function loadUserPreferences() {
+            if (!currentUser) return;
+
+            try {
+                // In a real application, you would fetch from your backend API
+                const response = await fetch(`/api/get-preferences/${currentUser.id}`);
+
+                if (response.ok) {
+                    const preferences = await response.json();
+                    if (preferences.interests) {
+                        selectedInterests = new Set(preferences.interests);
+                        updateUI();
+                    }
+                } else {
+                    console.log('No existing preferences found');
+                }
+            } catch (error) {
+                console.error('Error loading preferences:', error);
+
+                // Try to load from localStorage as fallback
+                const stored = localStorage.getItem(`userPreferences_${currentUser.id}`);
+                if (stored) {
+                    const preferences = JSON.parse(stored);
+                    selectedInterests = new Set(preferences.interests);
+                    updateUI();
+                }
+            }
+        }
+
+        // Update UI based on loaded preferences
+        function updateUI() {
+            document.querySelectorAll('.interest-card').forEach(card => {
+                const interest = card.getAttribute('data-interest');
+                if (selectedInterests.has(interest)) {
+                    card.classList.add('selected');
+                }
+            });
+            updateSelectionCount();
+            updateNextButton();
+        }
+
+        // Initialize particles
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 8 + 's';
+                particle.style.animationDuration = (Math.random() * 3 + 5) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // Handle interest selection
+        document.querySelectorAll('.interest-card').forEach(card => {
+            card.addEventListener('click', function () {
+                const interest = this.getAttribute('data-interest');
+
+                if (selectedInterests.has(interest)) {
+                    selectedInterests.delete(interest);
+                    this.classList.remove('selected');
+                } else {
+                    selectedInterests.add(interest);
+                    this.classList.add('selected');
+                }
+
+                updateSelectionCount();
+                updateNextButton();
+            });
+        });
+
+        // Update selection count
+        function updateSelectionCount() {
+            const count = selectedInterests.size;
+            document.getElementById('selectionCount').textContent =
+                `${count} of 3+ interests selected`;
+        }
+
+        // Update next button state
+        function updateNextButton() {
+            const nextBtn = document.getElementById('nextBtn');
+            if (currentPage === totalPages) {
+                nextBtn.textContent = selectedInterests.size >= 3 ? 'Get Recommendations' : 'Select More';
+                nextBtn.disabled = selectedInterests.size < 3;
+            } else {
+                nextBtn.textContent = 'Next';
+                nextBtn.disabled = false;
+            }
+        }
+
+        // Handle navigation
+        document.getElementById('nextBtn').addEventListener('click', async function () {
+            if (currentPage === totalPages && selectedInterests.size >= 3) {
+                // Check if user is logged in
+                if (!currentUser) {
+                    document.getElementById('loginModal').classList.add('show');
+                    return;
+                }
+
+                // Show loading
+                document.querySelector('.navigation').style.display = 'none';
+                document.getElementById('loading').classList.add('show');
+
+                const success = await saveUserPreferences();
+
+                document.getElementById('loading').classList.remove('show');
+
+                if (success) {
+                    document.getElementById('successMessage').classList.add('show');
+                } else {
+                    alert('Failed to save preferences. Please try again.');
+                    document.querySelector('.navigation').style.display = 'flex';
+                    document.querySelector('.page.active').style.display = 'block';
+                }
+            } else if (currentPage < totalPages) {
+                // Navigate to next page
+                document.getElementById(`page${currentPage}`).classList.remove('active');
+                document.querySelectorAll('.dot')[currentPage - 1].classList.remove('active');
+                currentPage++;
+                document.getElementById(`page${currentPage}`).classList.add('active');
+                document.querySelectorAll('.dot')[currentPage - 1].classList.add('active');
+                updateNextButton();
+            }
+        });
+
+        // Show specific page
+        function showPage(pageNum) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // Show current page
+            document.getElementById(`page${pageNum}`).classList.add('active');
+            
+            // Update progress bar
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = (pageNum / totalPages) * 100 + '%';
+            
+            // Update page indicators
+            document.querySelectorAll('.dot').forEach((dot, index) => {
+                dot.classList.toggle('active', index === pageNum - 1);
+            });
+            
+            // Update skip button text
+            const skipBtn = document.getElementById('skipBtn');
+            skipBtn.textContent = pageNum === totalPages ? 'Skip' : 'Skip';
+            
+            updateNextButton();
+        }
+
+        createParticles();
+        updateSelectionCount();
+        updateNextButton();
+    </script>
+</body>
+</html>
