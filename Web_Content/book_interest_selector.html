@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Interest Selector</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Lucide React icons as components
+        const ChevronLeft = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+        );
+
+        const ChevronRight = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+        );
+
+        const Loader2 = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+        );
+
+        const BookInterestSelector = () => {
+            const [currentPage, setCurrentPage] = useState(1);
+            const [selectedInterests, setSelectedInterests] = useState(new Set());
+            const [currentUser, setCurrentUser] = useState(null);
+            const [showLoginModal, setShowLoginModal] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [showSuccess, setShowSuccess] = useState(false);
+            const [particles, setParticles] = useState([]);
+
+            const totalPages = 3;
+            const minInterests = 3;
+
+            // Initialize particles
+            useEffect(() => {
+                const newParticles = Array.from({ length: 20 }, (_, i) => ({
+                    id: i,
+                    left: Math.random() * 100,
+                    delay: Math.random() * 8,
+                    duration: Math.random() * 3 + 5,
+                }));
+                setParticles(newParticles);
+            }, []);
+
+            // Check for existing user session
+            useEffect(() => {
+                checkUserSession();
+            }, []);
+
+            // Google Sign-In setup
+            useEffect(() => {
+                const initializeGoogleSignIn = () => {
+                    if (window.google) {
+                        window.google.accounts.id.initialize({
+                            client_id: '431905824213-kmv5vrg63fd0o5q75df65s0fo9qbj1vh.apps.googleusercontent.com',
+                            callback: handleCredentialResponse
+                        });
+                    }
+                };
+
+                if (window.google) {
+                    initializeGoogleSignIn();
+                } else {
+                    window.addEventListener('load', initializeGoogleSignIn);
+                }
+            }, []);
+
+            const interests = {
+                1: [
+                    { id: 'fantasy', icon: '🧙', title: 'Fantasy' },
+                    { id: 'mystery', icon: '🕵️', title: 'Mystery' },
+                    { id: 'romance', icon: '💕', title: 'Romance' },
+                    { id: 'thriller', icon: '⚡', title: 'Thriller' },
+                    { id: 'literary', icon: '📚', title: 'Literary Fiction' },
+                    { id: 'historical', icon: '⏳', title: 'Historical' },
+                ],
+                2: [
+                    { id: 'science', icon: '🔬', title: 'Science' },
+                    { id: 'biography', icon: '👤', title: 'Biography' },
+                    { id: 'business', icon: '💼', title: 'Business' },
+                    { id: 'selfhelp', icon: '🌟', title: 'Self-Help' },
+                    { id: 'history', icon: '🏛️', title: 'History' },
+                    { id: 'philosophy', icon: '🤔', title: 'Philosophy' },
+                ],
+                3: [
+                    { id: 'cooking', icon: '👨‍🍳', title: 'Cooking' },
+                    { id: 'travel', icon: '✈️', title: 'Travel' },
+                    { id: 'art', icon: '🎨', title: 'Art & Design' },
+                    { id: 'technology', icon: '💻', title: 'Technology' },
+                    { id: 'health', icon: '🏥', title: 'Health & Fitness' },
+                    { id: 'spirituality', icon: '🙏', title: 'Spirituality' },
+                ],
+            };
+
+            const checkUserSession = () => {
+                const userData = localStorage.getItem('bookAppUser');
+                if (userData) {
+                    const user = JSON.parse(userData);
+                    setCurrentUser(user);
+                    loadUserPreferences(user);
+                }
+            };
+
+            const handleCredentialResponse = (response) => {
+                const payload = JSON.parse(atob(response.credential.split('.')[1]));
+                
+                const user = {
+                    id: payload.sub,
+                    name: payload.name,
+                    email: payload.email,
+                    picture: payload.picture
+                };
+
+                setCurrentUser(user);
+                localStorage.setItem('bookAppUser', JSON.stringify(user));
+                setShowLoginModal(false);
+                loadUserPreferences(user);
+            };
+
+            const loadUserPreferences = async (user) => {
+                try {
+                    const response = await fetch(`http://localhost:5000/api/get-preferences/${user.id}`);
+                    if (response.ok) {
+                        const preferences = await response.json();
+                        if (preferences.interests) {
+                            setSelectedInterests(new Set(preferences.interests));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading preferences:', error);
+                    // Fallback to localStorage
+                    const stored = localStorage.getItem(`userPreferences_${user.id}`);
+                    if (stored) {
+                        const preferences = JSON.parse(stored);
+                        setSelectedInterests(new Set(preferences.interests));
+                    }
+                }
+            };
+
+            const signOut = () => {
+                if (window.google) {
+                    window.google.accounts.id.disableAutoSelect();
+                }
+                localStorage.removeItem('bookAppUser');
+                setCurrentUser(null);
+                setSelectedInterests(new Set());
+            };
+
+            const saveUserPreferences = async () => {
+                if (!currentUser) return false;
+
+                const preferences = {
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    email: currentUser.email,
+                    interests: Array.from(selectedInterests),
+                };
+
+                try {
+                    const response = await fetch('http://localhost:5000/api/save-user-and-interests', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(preferences),
+                    });
+
+                    if (response.ok) {
+                        console.log('Preferences saved successfully');
+                        return true;
+                    } else {
+                        console.error('Failed to save preferences');
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Error saving preferences:', error);
+                    // Fallback to localStorage
+                    localStorage.setItem(`userPreferences_${currentUser.id}`, JSON.stringify(preferences));
+                    return true;
+                }
+            };
+
+            const handleInterestToggle = (interestId) => {
+                const newInterests = new Set(selectedInterests);
+                if (newInterests.has(interestId)) {
+                    newInterests.delete(interestId);
+                } else {
+                    newInterests.add(interestId);
+                }
+                setSelectedInterests(newInterests);
+            };
+
+            const handleNext = async () => {
+                if (currentPage === totalPages && selectedInterests.size >= minInterests) {
+                    if (!currentUser) {
+                        setShowLoginModal(true);
+                        return;
+                    }
+
+                    setLoading(true);
+                    const success = await saveUserPreferences();
+                    setLoading(false);
+
+                    if (success) {
+                        setShowSuccess(true);
+                    } else {
+                        alert('Failed to save preferences. Please try again.');
+                    }
+                } else if (currentPage < totalPages) {
+                    setCurrentPage(currentPage + 1);
+                }
+            };
+
+            const handlePrevious = () => {
+                if (currentPage > 1) {
+                    setCurrentPage(currentPage - 1);
+                }
+            };
+
+            const initiateGoogleSignIn = () => {
+                if (window.google) {
+                    window.google.accounts.id.prompt();
+                }
+            };
+
+            const getNextButtonText = () => {
+                if (currentPage === totalPages) {
+                    return selectedInterests.size >= minInterests ? 'Get Recommendations' : 'Select More';
+                }
+                return 'Next';
+            };
+
+            const isNextDisabled = () => {
+                return currentPage === totalPages && selectedInterests.size < minInterests;
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 flex items-center justify-center">
+                        <div className="bg-white/10 backdrop-blur-md rounded-3xl p-12 text-center text-white">
+                            <div className="relative">
+                                <Loader2 className="w-16 h-16 mx-auto mb-6 animate-spin" />
+                            </div>
+                            <p className="text-xl">Saving your preferences...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (showSuccess) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 flex items-center justify-center">
+                        <div className="bg-white/10 backdrop-blur-md rounded-3xl p-12 text-center text-white">
+                            <div className="text-6xl mb-6">🎉</div>
+                            <h2 className="text-3xl font-bold mb-4">Success!</h2>
+                            <p className="text-xl opacity-90">Your preferences have been saved and your personalized recommendations are ready!</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 flex items-center justify-center relative overflow-hidden">
+                    {/* Floating Particles */}
+                    <div className="absolute inset-0 pointer-events-none">
+                        {particles.map((particle) => (
+                            <div
+                                key={particle.id}
+                                className="absolute w-1 h-1 bg-white/60 rounded-full"
+                                style={{
+                                    left: `${particle.left}%`,
+                                    animation: `float ${particle.duration}s infinite ease-in-out`,
+                                    animationDelay: `${particle.delay}s`,
+                                }}
+                            />
+                        ))}
+                    </div>
+
+                    {/* Main Container */}
+                    <div className="relative bg-white/10 backdrop-blur-md rounded-3xl p-10 w-full max-w-md mx-4 border border-white/20 shadow-2xl">
+                        {/* Background Shimmer Effect */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-white/5 rounded-3xl opacity-50 animate-pulse" />
+
+                        {/* Header */}
+                        <div className="text-center mb-8 relative z-10">
+                            <h1 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Choose Your Interests</h1>
+                            <p className="text-white/80 text-lg">Get personalized book recommendations</p>
+                        </div>
+
+                        {/* User Info */}
+                        {currentUser && (
+                            <div className="bg-white/10 rounded-xl p-4 mb-6 text-center relative z-10">
+                                <img
+                                    src={currentUser.picture}
+                                    alt="User Avatar"
+                                    className="w-12 h-12 rounded-full mx-auto mb-3 border-2 border-white/30"
+                                />
+                                <div className="text-white font-semibold">{currentUser.name}</div>
+                                <div className="text-white/70 text-sm">{currentUser.email}</div>
+                                <button
+                                    onClick={signOut}
+                                    className="mt-3 px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm hover:bg-white/20 transition-all duration-300"
+                                >
+                                    Sign Out
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-8 relative z-10">
+                            <div
+                                className="h-full bg-gradient-to-r from-pink-400 to-yellow-400 rounded-full transition-all duration-500"
+                                style={{ width: `${(currentPage / totalPages) * 100}%` }}
+                            />
+                        </div>
+
+                        {/* Page Indicators */}
+                        <div className="flex justify-center mb-6 gap-2 relative z-10">
+                            {[1, 2, 3].map((page) => (
+                                <div
+                                    key={page}
+                                    className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                                        page === currentPage ? 'bg-yellow-400 scale-125' : 'bg-white/30'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Selection Count */}
+                        <div className="text-center text-white/80 mb-6 relative z-10">
+                            {selectedInterests.size} of {minInterests}+ interests selected
+                        </div>
+
+                        {/* Interests Grid */}
+                        <div className="grid grid-cols-2 gap-4 mb-8 relative z-10">
+                            {interests[currentPage].map((interest) => (
+                                <div
+                                    key={interest.id}
+                                    onClick={() => handleInterestToggle(interest.id)}
+                                    className={`relative p-5 rounded-2xl cursor-pointer transition-all duration-300 transform hover:scale-105 ${
+                                        selectedInterests.has(interest.id)
+                                            ? 'bg-gradient-to-br from-pink-500 to-yellow-500 shadow-lg scale-105'
+                                            : 'bg-white/10 hover:bg-white/20'
+                                    } backdrop-blur-md border border-white/20 hover:border-white/40`}
+                                >
+                                    <div className="text-center">
+                                        <div
+                                            className={`w-16 h-20 mx-auto mb-4 rounded-lg flex items-center justify-center text-2xl shadow-lg ${
+                                                selectedInterests.has(interest.id)
+                                                    ? 'bg-white/90 text-gray-800'
+                                                    : 'bg-gradient-to-br from-blue-400 to-cyan-400 text-white'
+                                            }`}
+                                        >
+                                            {interest.icon}
+                                        </div>
+                                        <div className="text-white font-semibold text-sm drop-shadow-md">
+                                            {interest.title}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Navigation */}
+                        <div className="flex justify-between items-center relative z-10">
+                            <button
+                                onClick={handlePrevious}
+                                disabled={currentPage === 1}
+                                className="px-6 py-3 bg-white/10 border border-white/20 rounded-xl text-white hover:bg-white/20 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                                Previous
+                            </button>
+                            
+                            <button
+                                onClick={handleNext}
+                                disabled={isNextDisabled()}
+                                className="px-6 py-3 bg-gradient-to-r from-pink-500 to-yellow-500 text-white rounded-xl font-semibold hover:from-pink-600 hover:to-yellow-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg"
+                            >
+                                {getNextButtonText()}
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Login Modal */}
+                    {showLoginModal && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-4">🔐 Sign In Required</h2>
+                                <p className="text-gray-600 mb-6 leading-relaxed">
+                                    Please sign in with your Google account to save your preferences and get personalized book recommendations.
+                                </p>
+                                <button
+                                    onClick={initiateGoogleSignIn}
+                                    className="inline-flex items-center gap-3 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-300 shadow-lg"
+                                >
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                        <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                        <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                    Sign in with Google
+                                </button>
+                                <button
+                                    onClick={() => setShowLoginModal(false)}
+                                    className="block w-full mt-4 py-2 text-gray-500 hover:text-gray-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.render(<BookInterestSelector />, document.getElementById('root'));
+    </script>
+</body>
+</html>
