@@ -57,6 +57,10 @@
             const [loading, setLoading] = useState(false);
             const [showSuccess, setShowSuccess] = useState(false);
             const [particles, setParticles] = useState([]);
+            const [error, setError] = useState(null);
+
+            // IMPORTANT: Replace this with your own Google OAuth Client ID
+            const GOOGLE_CLIENT_ID = '431905824213-pufv78iagq6f1lmavt4e9hpsnblp3apg.apps.googleusercontent.com';
 
             const totalPages = 3;
             const minInterests = 3;
@@ -80,19 +84,36 @@
             // Google Sign-In setup
             useEffect(() => {
                 const initializeGoogleSignIn = () => {
-                    if (window.google) {
-                        window.google.accounts.id.initialize({
-                            client_id: '431905824213-pufv78iagq6f1lmavt4e9hpsnblp3apg.apps.googleusercontent.com',
-                            callback: handleCredentialResponse
-                        });
+                    if (window.google && window.google.accounts) {
+                        try {
+                            window.google.accounts.id.initialize({
+                                client_id: GOOGLE_CLIENT_ID,
+                                callback: handleCredentialResponse,
+                                auto_select: false,
+                                cancel_on_tap_outside: true
+                            });
+                        } catch (error) {
+                            console.error('Error initializing Google Sign-In:', error);
+                            setError('Failed to initialize Google Sign-In. Please check your Client ID.');
+                        }
                     }
                 };
 
-                if (window.google) {
+                if (window.google && window.google.accounts) {
                     initializeGoogleSignIn();
                 } else {
-                    window.addEventListener('load', initializeGoogleSignIn);
+                    const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+                    if (script) {
+                        script.addEventListener('load', initializeGoogleSignIn);
+                    }
                 }
+
+                return () => {
+                    const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+                    if (script) {
+                        script.removeEventListener('load', initializeGoogleSignIn);
+                    }
+                };
             }, []);
 
             const interests = {
@@ -125,59 +146,85 @@
             const checkUserSession = () => {
                 const userData = localStorage.getItem('bookAppUser');
                 if (userData) {
-                    const user = JSON.parse(userData);
-                    setCurrentUser(user);
-                    loadUserPreferences(user);
+                    try {
+                        const user = JSON.parse(userData);
+                        setCurrentUser(user);
+                        loadUserPreferences(user);
+                    } catch (error) {
+                        console.error('Error parsing user data:', error);
+                        localStorage.removeItem('bookAppUser');
+                    }
                 }
             };
 
             const handleCredentialResponse = (response) => {
-                const payload = JSON.parse(atob(response.credential.split('.')[1]));
-                
-                const user = {
-                    id: payload.sub,
-                    name: payload.name,
-                    email: payload.email,
-                    picture: payload.picture
-                };
+                try {
+                    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+                    
+                    const user = {
+                        id: payload.sub,
+                        name: payload.name,
+                        email: payload.email,
+                        picture: payload.picture
+                    };
 
-                setCurrentUser(user);
-                localStorage.setItem('bookAppUser', JSON.stringify(user));
-                setShowLoginModal(false);
-                loadUserPreferences(user);
+                    setCurrentUser(user);
+                    localStorage.setItem('bookAppUser', JSON.stringify(user));
+                    setShowLoginModal(false);
+                    setError(null);
+                    loadUserPreferences(user);
+                } catch (error) {
+                    console.error('Error parsing credential response:', error);
+                    setError('Failed to process login response. Please try again.');
+                }
             };
 
             const loadUserPreferences = async (user) => {
                 try {
-                    const response = await fetch(`http://localhost:5000/api/get-preferences/${user.id}`);
+                    const response = await fetch(`http://localhost:5001/api/get-preferences/${user.id}`);
                     if (response.ok) {
                         const preferences = await response.json();
-                        if (preferences.interests) {
+                        if (preferences.interests && Array.isArray(preferences.interests)) {
                             setSelectedInterests(new Set(preferences.interests));
                         }
+                    } else if (response.status === 404) {
+                        // User not found - this is okay for new users
+                        console.log('No existing preferences found for user');
+                    } else {
+                        throw new Error(`Server responded with status: ${response.status}`);
                     }
                 } catch (error) {
                     console.error('Error loading preferences:', error);
                     // Fallback to localStorage
                     const stored = localStorage.getItem(`userPreferences_${user.id}`);
                     if (stored) {
-                        const preferences = JSON.parse(stored);
-                        setSelectedInterests(new Set(preferences.interests));
+                        try {
+                            const preferences = JSON.parse(stored);
+                            if (preferences.interests && Array.isArray(preferences.interests)) {
+                                setSelectedInterests(new Set(preferences.interests));
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing stored preferences:', parseError);
+                        }
                     }
                 }
             };
 
             const signOut = () => {
-                if (window.google) {
+                if (window.google && window.google.accounts) {
                     window.google.accounts.id.disableAutoSelect();
                 }
                 localStorage.removeItem('bookAppUser');
                 setCurrentUser(null);
                 setSelectedInterests(new Set());
+                setError(null);
             };
 
             const saveUserPreferences = async () => {
-                if (!currentUser) return false;
+                if (!currentUser) {
+                    setError('No user logged in');
+                    return false;
+                }
 
                 const preferences = {
                     id: currentUser.id,
@@ -187,7 +234,7 @@
                 };
 
                 try {
-                    const response = await fetch('http://localhost:5000/api/save-user-and-interests', {
+                    const response = await fetch('http://localhost:5001/api/save-user-and-interests', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -195,15 +242,21 @@
                         body: JSON.stringify(preferences),
                     });
 
+                    const responseData = await response.json();
+
                     if (response.ok) {
-                        console.log('Preferences saved successfully');
+                        console.log('Preferences saved successfully:', responseData);
+                        // Also update localStorage as backup
+                        localStorage.setItem(`userPreferences_${currentUser.id}`, JSON.stringify(preferences));
                         return true;
                     } else {
-                        console.error('Failed to save preferences');
+                        console.error('Failed to save preferences:', responseData);
+                        setError(responseData.error || 'Failed to save preferences');
                         return false;
                     }
                 } catch (error) {
                     console.error('Error saving preferences:', error);
+                    setError('Network error. Saving to local storage instead.');
                     // Fallback to localStorage
                     localStorage.setItem(`userPreferences_${currentUser.id}`, JSON.stringify(preferences));
                     return true;
@@ -218,6 +271,7 @@
                     newInterests.add(interestId);
                 }
                 setSelectedInterests(newInterests);
+                setError(null);
             };
 
             const handleNext = async () => {
@@ -228,13 +282,12 @@
                     }
 
                     setLoading(true);
+                    setError(null);
                     const success = await saveUserPreferences();
                     setLoading(false);
 
                     if (success) {
                         setShowSuccess(true);
-                    } else {
-                        alert('Failed to save preferences. Please try again.');
                     }
                 } else if (currentPage < totalPages) {
                     setCurrentPage(currentPage + 1);
@@ -248,8 +301,45 @@
             };
 
             const initiateGoogleSignIn = () => {
-                if (window.google) {
-                    window.google.accounts.id.prompt();
+                setError(null);
+                if (window.google && window.google.accounts) {
+                    try {
+                        window.google.accounts.id.prompt((notification) => {
+                            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                                // Fallback to manual render
+                                const buttonDiv = document.createElement('div');
+                                buttonDiv.id = 'google-signin-button';
+                                document.body.appendChild(buttonDiv);
+                                
+                                window.google.accounts.id.renderButton(
+                                    buttonDiv,
+                                    { 
+                                        theme: 'outline', 
+                                        size: 'large',
+                                        width: 250
+                                    }
+                                );
+                                
+                                // Click the rendered button
+                                const button = buttonDiv.querySelector('div[role="button"]');
+                                if (button) {
+                                    button.click();
+                                }
+                                
+                                // Clean up
+                                setTimeout(() => {
+                                    if (document.body.contains(buttonDiv)) {
+                                        document.body.removeChild(buttonDiv);
+                                    }
+                                }, 100);
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Error initiating Google Sign-In:', error);
+                        setError('Failed to open Google Sign-In. Please check your browser settings.');
+                    }
+                } else {
+                    setError('Google Sign-In not loaded. Please refresh the page.');
                 }
             };
 
@@ -283,7 +373,16 @@
                         <div className="bg-white/10 backdrop-blur-md rounded-3xl p-12 text-center text-white">
                             <div className="text-6xl mb-6">🎉</div>
                             <h2 className="text-3xl font-bold mb-4">Success!</h2>
-                            <p className="text-xl opacity-90">Your preferences have been saved and your personalized recommendations are ready!</p>
+                            <p className="text-xl opacity-90 mb-6">Your preferences have been saved and your personalized recommendations are ready!</p>
+                            <button
+                                onClick={() => {
+                                    setShowSuccess(false);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-6 py-3 bg-white/20 backdrop-blur-md rounded-xl text-white hover:bg-white/30 transition-all duration-300"
+                            >
+                                Update Preferences
+                            </button>
                         </div>
                     </div>
                 );
@@ -316,6 +415,13 @@
                             <h1 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">Choose Your Interests</h1>
                             <p className="text-white/80 text-lg">Get personalized book recommendations</p>
                         </div>
+
+                        {/* Error Message */}
+                        {error && (
+                            <div className="bg-red-500/20 backdrop-blur-md border border-red-500/30 rounded-xl p-4 mb-6 text-center relative z-10">
+                                <p className="text-white">{error}</p>
+                            </div>
+                        )}
 
                         {/* User Info */}
                         {currentUser && (
@@ -421,6 +527,11 @@
                                 <p className="text-gray-600 mb-6 leading-relaxed">
                                     Please sign in with your Google account to save your preferences and get personalized book recommendations.
                                 </p>
+                                {error && (
+                                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                        {error}
+                                    </div>
+                                )}
                                 <button
                                     onClick={initiateGoogleSignIn}
                                     className="inline-flex items-center gap-3 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-300 shadow-lg"
